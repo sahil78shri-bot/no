@@ -1,0 +1,191 @@
+# Advanced Render Configuration for nomore PWA
+# This file includes additional options for production deployments
+
+services:
+  # Backend API Service
+  - type: web
+    name: nomore-backend
+    env: node
+    region: oregon  # Choose: oregon, frankfurt, singapore
+    plan: free  # Options: free, starter, standard, pro
+    buildCommand: |
+      cd backend
+      npm ci --only=production
+      npm run build
+    startCommand: cd backend && npm start
+    healthCheckPath: /api/health
+    
+    # Auto-deploy settings
+    autoDeploy: true
+    branch: main  # Deploy from main branch
+    
+    # Resource limits (for paid plans)
+    # numInstances: 1
+    # disk:
+    #   name: backend-disk
+    #   size: 1GB
+    #   mountPath: /opt/render/project/storage
+    
+    # Environment variables
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nomore-database
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: nomore-redis
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false  # Must be set manually for security
+      - key: AUTH0_DOMAIN
+        sync: false
+      - key: AUTH0_CLIENT_ID
+        sync: false
+      - key: AUTH0_CLIENT_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PORT
+        value: 10000
+      - key: LOG_LEVEL
+        value: info
+      - key: CORS_ORIGIN
+        fromService:
+          type: web
+          name: nomore-frontend
+          property: url
+
+  # Frontend Static Site
+  - type: web
+    name: nomore-frontend
+    env: static
+    region: oregon
+    plan: free
+    buildCommand: |
+      cd frontend
+      npm ci
+      npm run build
+    staticPublishPath: frontend/build
+    
+    # Auto-deploy settings
+    autoDeploy: true
+    branch: main
+    
+    # Pull request previews
+    pullRequestPreviewsEnabled: true
+    
+    # Custom headers for security and performance
+    headers:
+      # Security headers
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-XSS-Protection
+        value: 1; mode=block
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: geolocation=(), microphone=(), camera=()
+      
+      # Caching headers
+      - path: /static/js/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /static/css/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /static/media/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /manifest.json
+        name: Cache-Control
+        value: public, max-age=86400
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+    
+    # SPA routing
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    
+    # Environment variables
+    envVars:
+      - key: REACT_APP_API_BASE_URL
+        value: https://nomore-backend.onrender.com/api  # Update with your actual backend URL
+      - key: REACT_APP_AUTH0_DOMAIN
+        sync: false
+      - key: REACT_APP_AUTH0_CLIENT_ID
+        sync: false
+      - key: REACT_APP_VERSION
+        value: 1.0.0
+      - key: REACT_APP_ENVIRONMENT
+        value: production
+
+databases:
+  # PostgreSQL Database
+  - name: nomore-database
+    databaseName: nomore
+    user: nomore_user
+    plan: free  # Options: free, starter, standard, pro
+    region: oregon
+    postgresMajorVersion: 15
+    
+    # Backup settings (for paid plans)
+    # ipAllowList: []  # Restrict access by IP
+    
+  # Redis Cache (optional - uncomment if needed)
+  - name: nomore-redis
+    plan: free  # Options: free, starter, standard, pro
+    region: oregon
+    maxmemoryPolicy: allkeys-lru  # Eviction policy
+
+# Optional: Background workers (uncomment if needed)
+# - type: worker
+#   name: nomore-worker
+#   env: node
+#   buildCommand: cd backend && npm install
+#   startCommand: cd backend && npm run worker
+#   plan: free
+#   envVars:
+#     - key: NODE_ENV
+#       value: production
+#     - key: DATABASE_URL
+#       fromDatabase:
+#         name: nomore-database
+#         property: connectionString
+#     - key: REDIS_URL
+#       fromService:
+#         type: redis
+#         name: nomore-redis
+#         property: connectionString
+
+# Optional: Cron jobs (uncomment if needed)
+# - type: cron
+#   name: nomore-cleanup
+#   schedule: "0 2 * * *"  # Daily at 2 AM
+#   buildCommand: cd backend && npm install
+#   startCommand: cd backend && npm run cleanup
+#   plan: free
+#   envVars:
+#     - key: DATABASE_URL
+#       fromDatabase:
+#         name: nomore-database
+#         property: connectionString
